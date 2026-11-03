@@ -36,7 +36,7 @@ Estoy en etapa de formación: lo que sigue es lo que he usado en proyectos y lo 
 <img src="https://skillicons.dev/icons?i=py,java,cs,js,ts&theme=dark" alt="Python, Java, C#, JavaScript, TypeScript"/>
 
 **Backend**<br/>
-<img src="https://skillicons.dev/icons?i=spring" alt="Spring Boot"/>
+<img src="https://skillicons.dev/icons?i=fastapi" alt="FastAPI"/>
 
 **Frontend**<br/>
 <img src="https://skillicons.dev/icons?i=react,vite,tailwind,html,css&theme=dark" alt="React, Vite, Tailwind, HTML, CSS"/>
@@ -69,25 +69,27 @@ Estoy en etapa de formación: lo que sigue es lo que he usado en proyectos y lo 
 <td width="50%" valign="top">
 
 **`P-01` Plataforma Estudio AI**<br/>
-<sub>BACKEND · IA GENERATIVA</sub>
+<sub>FULL STACK · IA GENERATIVA</sub>
 
-Herramienta de estudio que genera resumen general y esencial a partir de texto o PDF, usando la API de OpenAI solo en ese módulo; preguntas, práctica y mapas conceptuales siguen simulados.
+Herramienta de estudio que genera resumen general y esencial a partir de texto o PDF, y mapas conceptuales con IA. Frontend en React + Vite, backend en FastAPI que llama a la API de OpenAI.
 
 **Problema:** condensar material de estudio extenso.<br/>
-**Decisiones:** una sola llamada devuelve ambos resúmenes; el PDF se procesa sin almacenarse; sin base de datos; configuración por variables de entorno.
+**Decisiones:** una sola llamada devuelve ambos resúmenes; el PDF se procesa sin guardarse; sin base de datos; acceso con Google (OAuth); la clave de OpenAI vive solo en el backend.
 
-<sub>Código y documentación en español</sub>
+[Repositorio](https://github.com/mathiassimoncastillosolano-eng/Plataforma-Estudio---AI) · [Demo](https://plataforma-estudio-ai.vercel.app)
 
 </td>
 <td width="50%" valign="top">
 
 **`P-02` RutaLibre**<br/>
-<sub>FULL STACK · PORTAL WEB</sub>
+<sub>FRONTEND · PORTAL WEB</sub>
 
-Portal de agencia de transporte terrestre para buscar viajes, elegir asiento y comprar pasajes.
+Portal web de agencia de transporte terrestre: búsqueda de pasajes, registro e inicio de sesión, compra y tickets electrónicos.
 
-**Problema:** el proceso de adquisición de pasajes en un solo flujo.<br/>
-**Stack:** React + Vite en el frontend y Spring Boot en el backend. Planificación en Scrum (épica, historias de usuario, Sprint Backlog) y sistema de diseño en modo oscuro.
+**Problema:** reunir la adquisición de pasajes en un solo flujo.<br/>
+**Stack:** React + Vite con datos simulados; backend en preparación. Planificado con Scrum (épica, historias de usuario, Sprint Backlog).
+
+[Repositorio](https://github.com/mathiassimoncastillosolano-eng/Portal---Transportes)
 
 <sub>Proyecto en desarrollo</sub>
 
@@ -102,20 +104,24 @@ Portal de agencia de transporte terrestre para buscar viajes, elegir asiento y c
 Modelo de regresión que estima el nivel de conocimiento (0–1) de un estudiante por concepto y período de práctica.
 
 **Problema:** personalizar el seguimiento del aprendizaje.<br/>
-**Trabajo realizado:** diseño de un dataset sintético, evitando fuga de datos entre períodos.
+**Trabajo realizado:** dataset sintético de 125 000 registros, diseñado para evitar fuga de datos entre períodos.
+
+[Código y dataset](https://github.com/mathiassimoncastillosolano-eng/Plataforma-Estudio---AI/tree/main/ml)
 
 <sub>Proyecto académico</sub>
 
 </td>
 <td width="50%" valign="top">
 
-**`P-04` NEXORA Finance**<br/>
+**`P-04` Sistema de Préstamos (NEXORA Finance)**<br/>
 <sub>SISTEMA EMPRESARIAL · BASE DE DATOS</sub>
 
 Sistema de gestión y auditoría de préstamos para una financiera con varias agencias.
 
 **Problema:** controlar clientes, solicitudes y préstamos con reglas de negocio claras.<br/>
-**Stack:** React, TypeScript, Vite y Tailwind. Frontend con datos simulados; diseño de base de datos en Supabase en curso.
+**Stack:** React, TypeScript, Vite y Tailwind, con datos simulados. Diseño de base de datos en Supabase en curso.
+
+[Repositorio](https://github.com/mathiassimoncastillosolano-eng/Sistema-de-Prestamos)
 
 <sub>Proyecto en desarrollo</sub>
 
@@ -142,7 +148,7 @@ Sistema de gestión y auditoría de préstamos para una financiera con varias ag
 
 ### 05 &nbsp;/&nbsp; Foco actual
 
-- Arquitectura backend y diseño de APIs (Spring Boot)
+- Arquitectura backend y diseño de APIs (FastAPI)
 - Modelado de bases de datos relacionales en PostgreSQL / Supabase
 - Machine Learning aplicado a educación
 - Infraestructura como código y servicios cloud
@@ -151,4 +157,4 @@ Sistema de gestión y auditoría de préstamos para una financiera con varias ag
 
 ### 06 &nbsp;/&nbsp; Contacto
 
-[GitHub](https://github.com/mathiassimoncastillosolano-eng)
+[GitHub](https://github.com/mathiassimoncastillosolano-eng) · [LinkedIn](https://www.linkedin.com/in/mathias-simon-castillo-solano-aa60a5391/)
