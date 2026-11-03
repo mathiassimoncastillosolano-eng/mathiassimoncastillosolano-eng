@@ -3,7 +3,7 @@ name: Actualizar perfil
 on:
   schedule:
     - cron: "17 5 * * *"   # una vez al día
-  workflow_dispatch:         # también manual desde la pestaña Actions
+  workflow_dispatch:         # también manual: pestaña Actions > Actualizar perfil > Run workflow
 
 permissions:
   contents: write
@@ -18,24 +18,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Generar estadísticas
-        run: python scripts/generar_stats.py
+      - name: Generar panel y mapa de calor (datos reales de la API de GitHub)
+        working-directory: scripts
+        run: python generar_stats.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_USER: ${{ github.repository_owner }}
 
-      - name: Generar serpiente de contribuciones
-        uses: Platane/snk/svg-only@v3
-        with:
-          github_user_name: ${{ github.repository_owner }}
-          outputs: |
-            dist/snake.svg?color_snake=#22D3EE&color_dots=#111C2B,#1E3A5F,#3B82F6,#22D3EE,#8B5CF6
-
       - name: Publicar cambios
         run: |
-          cp dist/snake.svg assets/snake.svg
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/stats.svg assets/snake.svg
-          git diff --cached --quiet || git commit -m "chore: actualizar estadísticas y serpiente"
+          git add assets/stats.svg assets/heatmap.svg
+          git diff --cached --quiet || git commit -m "chore: actualizar panel de actividad y mapa de calor"
           git push

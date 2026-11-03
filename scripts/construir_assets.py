@@ -1,324 +1,236 @@
 #!/usr/bin/env python3
-"""Genera los SVG animados del perfil en ../assets (solo biblioteca estándar)."""
+"""Genera todos los SVG del perfil en ../assets.
+
+Uso:  python scripts/construir_assets.py
+Requisitos: Python 3.9+ y `fontTools` (pip install fonttools) solo para convertir el nombre del hero a trazados.
+Los logos están en scripts/logos (simple-icons CC0 y devicon MIT); no se descarga nada.
+"""
+import math
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from diseno import *  # noqa: E402,F401,F403
 import generar_stats  # noqa: E402
 
-AQUI = os.path.dirname(os.path.abspath(__file__))
-SALIDA = os.path.join(AQUI, "..", "assets")
-os.makedirs(SALIDA, exist_ok=True)
+FUENTE_HERO = os.path.join(AQUI, "fuentes", "Inter-ExtraBold.otf")
 
-BG, S1, S2 = "#070B12", "#0D1421", "#111C2B"
-BLUE, CYAN, PURPLE = "#3B82F6", "#22D3EE", "#8B5CF6"
-TXT, MUTED, LINE = "#F8FAFC", "#94A3B8", "#1E293B"
-SANS = "Inter,'Segoe UI',Helvetica,Arial,sans-serif"
-MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
-
-COMUN = f"""
-<linearGradient id="gTxt" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="{CYAN}"/><stop offset=".55" stop-color="{BLUE}"/><stop offset="1" stop-color="{PURPLE}"/></linearGradient>
-<linearGradient id="gLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="{CYAN}"/><stop offset="1" stop-color="{PURPLE}" stop-opacity="0"/></linearGradient>
-<linearGradient id="gSweep" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".10"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-<linearGradient id="gScan" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{CYAN}" stop-opacity="0"/><stop offset=".5" stop-color="{CYAN}" stop-opacity=".55"/><stop offset="1" stop-color="{CYAN}" stop-opacity="0"/></linearGradient>
-<pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="{MUTED}" stroke-opacity=".08"/></pattern>
-<filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+DEFS_COMUN = f"""
+<linearGradient id="gTxt" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="{MENTA}"/><stop offset="1" stop-color="{JADE}"/></linearGradient>
+<linearGradient id="gLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="{JADE}"/><stop offset="1" stop-color="{JADE}" stop-opacity="0"/></linearGradient>
 """
 
 
-def envolver(w, h, cuerpo, etiqueta, defs=""):
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}" '
-            f'role="img" aria-label="{etiqueta}"><defs>{COMUN}{defs}</defs>{cuerpo}</svg>')
+def contorno(cx, cy, r, k, n=72):
+    """Curva de nivel cerrada y suave (Catmull-Rom -> Bézier)."""
+    pts = []
+    for i in range(n):
+        a = 2 * math.pi * i / n
+        rr = r * (1 + .10 * math.sin(3 * a + k * .21) + .06 * math.sin(5 * a - k * .33 + 1.3) + .04 * math.sin(2 * a + .8))
+        pts.append((cx + rr * math.cos(a) + k * 1.6, cy + rr * math.sin(a) * .86 - k * 1.1))
+    d = f"M{pts[0][0]:.1f} {pts[0][1]:.1f}"
+    for i in range(n):
+        p0, p1, p2, p3 = pts[(i - 1) % n], pts[i], pts[(i + 1) % n], pts[(i + 2) % n]
+        c1 = (p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6)
+        c2 = (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6)
+        d += f"C{c1[0]:.1f} {c1[1]:.1f} {c2[0]:.1f} {c2[1]:.1f} {p2[0]:.1f} {p2[1]:.1f}"
+    return d + "Z"
 
 
-def guardar(nombre, contenido):
-    with open(os.path.join(SALIDA, nombre), "w", encoding="utf-8") as f:
-        f.write(contenido)
-    print("ok", nombre, len(contenido) // 1024, "KB")
-
-
-def parpadeo(x, y, w, h, color):
-    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="{color}">'
-            f'<animate attributeName="opacity" values="1;0" dur="1.1s" repeatCount="indefinite" calcMode="discrete"/></rect>')
-
-
-# --------------------------------------------------------------------- header
+# ------------------------------------------------------------------------ hero
 def header():
-    W, H = 1000, 420
-    nodos = [(600, 80), (690, 50), (780, 110), (880, 60), (950, 130), (640, 190), (740, 225),
-             (840, 180), (930, 245), (610, 305), (710, 340), (810, 305), (900, 350), (960, 320)]
-    aristas = [(0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (2, 7), (1, 6), (5, 6), (6, 7), (7, 8), (4, 8), (5, 9),
-               (6, 10), (6, 11), (7, 11), (8, 12), (9, 10), (10, 11), (11, 12), (12, 13), (8, 13), (2, 6), (3, 7)]
-    s = [f'<rect width="{W}" height="{H}" rx="20" fill="{BG}"/>',
-         '<clipPath id="cl"><rect width="1000" height="420" rx="20"/></clipPath><g clip-path="url(#cl)">',
-         f'<rect width="{W}" height="{H}" fill="url(#grid)"/>',
-         f'<radialGradient id="b1"><stop offset="0" stop-color="{BLUE}" stop-opacity=".38"/><stop offset="1" stop-color="{BLUE}" stop-opacity="0"/></radialGradient>',
-         f'<radialGradient id="b2"><stop offset="0" stop-color="{PURPLE}" stop-opacity=".34"/><stop offset="1" stop-color="{PURPLE}" stop-opacity="0"/></radialGradient>',
-         f'<radialGradient id="b3"><stop offset="0" stop-color="{CYAN}" stop-opacity=".22"/><stop offset="1" stop-color="{CYAN}" stop-opacity="0"/></radialGradient>',
-         '<circle cx="820" cy="130" r="260" fill="url(#b1)"><animateTransform attributeName="transform" type="translate" values="0 0;-40 30;0 0" dur="11s" repeatCount="indefinite"/></circle>',
-         '<circle cx="960" cy="400" r="240" fill="url(#b2)"><animateTransform attributeName="transform" type="translate" values="0 0;-50 -20;0 0" dur="13s" repeatCount="indefinite"/></circle>',
-         '<circle cx="120" cy="60" r="200" fill="url(#b3)"><animateTransform attributeName="transform" type="translate" values="0 0;40 30;0 0" dur="15s" repeatCount="indefinite"/></circle>']
-    for i, (a, b) in enumerate(aristas):
-        (x1, y1), (x2, y2) = nodos[a], nodos[b]
-        s.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{BLUE}" stroke-opacity=".42" stroke-width="1.3"/>')
-        if i % 3 == 0:
-            s.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{CYAN}" stroke-width="1.5" stroke-dasharray="5 9">'
-                     f'<animate attributeName="stroke-dashoffset" from="0" to="-28" dur="{1.1 + (i % 4) * .3:.1f}s" repeatCount="indefinite"/></line>')
-    for i, (a, b) in enumerate(aristas):
-        if i % 2 == 0:
-            (x1, y1), (x2, y2) = nodos[a], nodos[b]
-            col = CYAN if i % 4 == 0 else PURPLE
-            s.append(f'<circle r="3.2" fill="{col}" filter="url(#glow)"><animateMotion dur="{2.2 + (i % 5) * .5:.1f}s" begin="{(i % 7) * .35:.2f}s" '
-                     f'repeatCount="indefinite" path="M{x1} {y1} L{x2} {y2}"/></circle>')
-    cols = [CYAN, BLUE, PURPLE]
-    for i, (x, y) in enumerate(nodos):
-        r = 9 if i in (2, 7, 6) else 6
-        s.append(f'<circle cx="{x}" cy="{y}" r="{r}" fill="{S1}" stroke="{cols[i % 3]}" stroke-width="1.8">'
-                 f'<animate attributeName="r" values="{r};{r + 2.5};{r}" dur="3.2s" begin="{i * .23:.2f}s" repeatCount="indefinite"/></circle>'
-                 f'<circle cx="{x}" cy="{y}" r="2.4" fill="{cols[i % 3]}"/>')
-    for txt, (x, y) in {"API": nodos[2], "ML": nodos[7], "DB": nodos[10], "UI": nodos[8], "DATA": nodos[5]}.items():
-        s.append(f'<text x="{x + 14}" y="{y - 12}" font-family="{MONO}" font-size="11" fill="{CYAN}" fill-opacity=".85" letter-spacing="1.5">{txt}</text>')
-    s.append('<rect x="0" y="0" width="2" height="420" fill="url(#gScan)"><animateTransform attributeName="transform" type="translate" values="-10 0;1010 0" dur="8s" repeatCount="indefinite"/></rect>')
+    """Concepto: curvas de nivel (cartografía) que respiran; el pin marca Trujillo."""
+    W, H, CX, CY = 1000, 420, 740, 215
+    css = css_base(
+        ".c{transform-box:view-box;transform-origin:740px 215px;animation:resp 22s ease-in-out infinite alternate}"
+        + keyframes("resp", [(0, "transform:rotate(-1.5deg) scale(.995)"), (100, "transform:rotate(2.5deg) scale(1.015)")])
+        + ".pulso{transform-origin:center;animation:pulso 3.4s ease-out infinite}"
+        + keyframes("pulso", [(0, "transform:scale(1);opacity:.7"), (100, "transform:scale(3.4);opacity:0")])
+        + ".mer{animation:mer 12s linear infinite}"
+        + keyframes("mer", [(0, "transform:translateX(-200px);opacity:0"), (10, "opacity:.9"), (85, "opacity:.9"),
+                            (100, "transform:translateX(560px);opacity:0")])
+        + ".sub{transform-origin:left center;animation:sub 7s ease-in-out infinite}"
+        + keyframes("sub", [(0, "transform:scaleX(0)"), (22, "transform:scaleX(1)"), (92, "transform:scaleX(1)"), (100, "transform:scaleX(0)")])
+        + ".punto{animation:punto 2.4s ease-in-out infinite}"
+        + keyframes("punto", [(0, "opacity:1"), (50, "opacity:.25"), (100, "opacity:1")]))
+    defs = (DEFS_COMUN
+            + f'<radialGradient id="luz" cx="{CX / W}" cy="{CY / H}" r=".55"><stop offset="0" stop-color="{JADE}" stop-opacity=".22"/><stop offset="1" stop-color="{JADE}" stop-opacity="0"/></radialGradient>'
+            f'<linearGradient id="vel" x1="0" y1="0" x2="1" y2="0"><stop offset=".22" stop-color="{BG}"/><stop offset=".66" stop-color="{BG}" stop-opacity="0"/></linearGradient>'
+            f'<linearGradient id="merG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="{MENTA}" stop-opacity="0"/><stop offset=".5" stop-color="{MENTA}" stop-opacity=".5"/><stop offset="1" stop-color="{MENTA}" stop-opacity="0"/></linearGradient>'
+            '<clipPath id="cl"><rect width="1000" height="420" rx="20"/></clipPath>')
+    s = [f'<rect width="{W}" height="{H}" rx="20" fill="{BG}"/>', '<g clip-path="url(#cl)">',
+         f'<rect width="{W}" height="{H}" fill="url(#luz)"/>']
+    for k in range(1, 19):
+        r = 18 + k * 21
+        marca = k % 4 == 0
+        op = max(.10, .62 - k * .028)
+        s.append(f'<path class="c" style="animation-duration:{18 + k * 1.3:.1f}s" d="{contorno(CX, CY, r, k)}" fill="none" '
+                 f'stroke="{MENTA if marca else JADE}" stroke-opacity="{op + (.12 if marca else 0):.2f}" stroke-width="{1.7 if marca else 1}"/>')
+    s.append(f'<rect class="mer" x="560" y="0" width="140" height="{H}" fill="url(#merG)" opacity="0"/>')
+    s.append(f'<rect width="{W}" height="{H}" fill="url(#vel)"/>')
+    # pin de ubicación
+    s.append(f'<circle class="pulso" cx="{CX}" cy="{CY}" r="9" fill="none" stroke="{MENTA}" stroke-width="2"/>'
+             f'<circle cx="{CX}" cy="{CY}" r="7" fill="{BG}" stroke="{MENTA}" stroke-width="2.2"/><circle cx="{CX}" cy="{CY}" r="3" fill="{MENTA}"/>'
+             f'<text x="{CX + 22}" y="{CY - 12}" font-family="{MONO}" font-size="16" fill="{MENTA}" letter-spacing="1.5">TRUJILLO</text>'
+             f'<text x="{CX + 22}" y="{CY + 12}" font-family="{MONO}" font-size="16" fill="{MUTED}" letter-spacing="1">8.11°S 79.03°W</text>')
     s.append('</g>')
-    s.append(f'<path d="M30 54V30H54M970 366V390H946" fill="none" stroke="{MUTED}" stroke-opacity=".45" stroke-width="1.4"/>')
-    # texto
-    s.append(f'<circle cx="62" cy="60" r="4.5" fill="{CYAN}"><animate attributeName="opacity" values="1;.25;1" dur="1.8s" repeatCount="indefinite"/></circle>')
-    s.append(f'<text x="76" y="64.5" font-family="{MONO}" font-size="13" fill="{CYAN}" letter-spacing="3">SOFTWARE ENGINEERING</text>')
-    s.append(parpadeo(300, 52, 8, 16, CYAN))
-    s.append(f'<text x="54" y="178" font-family="{SANS}" font-size="100" font-weight="800" fill="{TXT}" letter-spacing="-3">Mathias</text>')
-    s.append(f'<text x="54" y="276" font-family="{SANS}" font-size="100" font-weight="800" fill="url(#gTxt)" letter-spacing="-3">Castillo</text>')
-    s.append(f'<rect x="58" y="298" width="150" height="4" rx="2" fill="url(#gTxt)"><animate attributeName="width" values="0;150;150" keyTimes="0;.15;1" dur="6s" repeatCount="indefinite"/></rect>')
-    s.append(f'<text x="58" y="340" font-family="{SANS}" font-size="21" fill="{MUTED}">Backend  <tspan fill="{CYAN}">/</tspan>  AI &amp; Data  <tspan fill="{CYAN}">/</tspan>  Software Architecture</text>')
-    s.append(f'<line x1="54" y1="372" x2="946" y2="372" stroke="{LINE}"/>')
-    s.append(f'<text x="58" y="396" font-family="{MONO}" font-size="12" fill="{MUTED}" letter-spacing="2">UPAO · INGENIERÍA DE SISTEMAS E IA · TRUJILLO, PE</text>')
-    s.append(f'<text x="946" y="396" text-anchor="end" font-family="{MONO}" font-size="12" fill="{MUTED}" fill-opacity=".8" letter-spacing="2">8.11°S 79.03°W</text>')
+    s.append(f'<circle class="punto" cx="62" cy="64" r="5" fill="{JADE}"/>'
+             f'<text x="80" y="70" font-family="{MONO}" font-size="18" fill="{MENTA}" letter-spacing="3.5">SOFTWARE ENGINEERING</text>')
+    try:
+        d1, _ = texto_a_path("Mathias", 108, 52, 192, FUENTE_HERO, -2.5)
+        d2, _ = texto_a_path("Castillo", 108, 52, 292, FUENTE_HERO, -2.5)
+        s.append(f'<path d="{d1}" fill="{TXT}"/><path d="{d2}" fill="url(#gTxt)"/>')
+    except Exception as e:  # sin fontTools: texto normal como respaldo
+        print("aviso: sin fontTools, el nombre queda como texto:", e)
+        s.append(f'<text x="52" y="192" font-family="{SANS}" font-size="108" font-weight="800" fill="{TXT}" letter-spacing="-3">Mathias</text>'
+                 f'<text x="52" y="292" font-family="{SANS}" font-size="108" font-weight="800" fill="url(#gTxt)" letter-spacing="-3">Castillo</text>')
+    s.append(f'<rect class="sub" x="56" y="314" width="150" height="4" rx="2" fill="url(#gTxt)"/>')
+    s.append(f'<text x="56" y="354" font-family="{SANS}" font-size="24" fill="{MUTED}">Backend <tspan fill="{JADE}">/</tspan> AI &amp; Data <tspan fill="{JADE}">/</tspan> Software Architecture</text>')
+    s.append(f'<line x1="54" y1="376" x2="946" y2="376" stroke="{LINE}"/>')
+    s.append(f'<text x="56" y="402" font-family="{MONO}" font-size="16" fill="{MUTED}" letter-spacing="1.5">UPAO · INGENIERÍA DE SISTEMAS E IA · TRUJILLO, PE</text>')
     s.append(f'<rect x=".5" y=".5" width="999" height="419" rx="20" fill="none" stroke="{LINE}"/>')
-    guardar("header.svg", envolver(W, H, "".join(s), "Mathias Castillo — Software Engineering. Backend, AI y Data, Software Architecture"))
+    guardar("header.svg", envolver(W, H, "".join(s), "Mathias Castillo — Software Engineering. Backend, AI y Data, Software Architecture. Curvas de nivel verdes animadas con un pin sobre Trujillo.", defs, css))
 
 
-# ------------------------------------------------------------------ secciones
+# --------------------------------------------------------------------- secciones
 def titulo(n, texto, etiqueta, archivo):
-    W, H = 1000, 74
-    s = [f'<rect x=".5" y=".5" width="999" height="73" rx="16" fill="{S1}" stroke="{LINE}"/>',
-         f'<text x="28" y="45" font-family="{MONO}" font-size="14" fill="{CYAN}" letter-spacing="2">{n:02d}</text>',
-         f'<text x="72" y="47" font-family="{SANS}" font-size="28" font-weight="800" fill="{TXT}" letter-spacing="-.5">{texto}</text>',
-         f'<text x="972" y="45" text-anchor="end" font-family="{MONO}" font-size="12" fill="{MUTED}" letter-spacing="2">// {etiqueta}</text>',
-         f'<rect x="28" y="62" width="944" height="2" rx="1" fill="{LINE}"/>',
-         f'<rect x="28" y="62" width="260" height="2" rx="1" fill="url(#gLine)"/>',
-         f'<circle cy="63" r="3.5" fill="{CYAN}" filter="url(#glow)"><animate attributeName="cx" values="28;972;28" dur="9s" repeatCount="indefinite"/></circle>']
-    guardar(archivo, envolver(W, H, "".join(s), texto))
+    W, H = 1000, 80
+    css = css_base(".pt{animation:rec 9s ease-in-out infinite}" + keyframes("rec", [(0, "transform:translateX(0)"), (50, "transform:translateX(930px)"), (100, "transform:translateX(0)")]))
+    s = [marco(W, H, S1, LINE, 16),
+         f'<text x="30" y="49" font-family="{MONO}" font-size="18" fill="{JADE}" letter-spacing="2">{n:02d}</text>',
+         f'<text x="80" y="52" font-family="{SANS}" font-size="30" font-weight="800" fill="{TXT}" letter-spacing="-.5">{texto}</text>',
+         f'<text x="970" y="49" text-anchor="end" font-family="{MONO}" font-size="16" fill="{MUTED}" letter-spacing="2">// {etiqueta}</text>',
+         f'<rect x="30" y="68" width="940" height="2" rx="1" fill="{LINE}"/><rect x="30" y="68" width="280" height="2" rx="1" fill="url(#gLine)"/>',
+         f'<circle class="pt" cx="35" cy="69" r="4" fill="{MENTA}"/>']
+    guardar(archivo, envolver(W, H, "".join(s), f"{n:02d} {texto}", DEFS_COMUN, css))
 
 
 def ahora():
-    W, H = 1000, 84
-    s = [f'<rect x=".5" y=".5" width="999" height="83" rx="16" fill="{S1}" stroke="{LINE}"/>',
-         f'<rect x="0" y="0" width="999" height="83" rx="16" fill="url(#gSweep)" opacity=".7"><animateTransform attributeName="transform" type="translate" values="-1000 0;1000 0" dur="7s" repeatCount="indefinite"/></rect>',
-         f'<circle cx="34" cy="42" r="12" fill="{CYAN}" fill-opacity=".18"><animate attributeName="r" values="7;15;7" dur="2s" repeatCount="indefinite"/><animate attributeName="fill-opacity" values=".35;0;.35" dur="2s" repeatCount="indefinite"/></circle>',
-         f'<circle cx="34" cy="42" r="5" fill="{CYAN}"/>',
-         f'<text x="62" y="36" font-family="{MONO}" font-size="11" fill="{CYAN}" letter-spacing="3">CONSTRUYENDO</text>',
-         f'<text x="62" y="60" font-family="{SANS}" font-size="18" font-weight="600" fill="{TXT}">Sistemas full stack con IA, bases de datos y backend</text>',
-         f'<line x1="640" y1="20" x2="640" y2="64" stroke="{LINE}"/>',
-         f'<text x="666" y="36" font-family="{MONO}" font-size="11" fill="{PURPLE}" letter-spacing="3">APRENDIENDO</text>',
-         f'<text x="666" y="60" font-family="{SANS}" font-size="18" font-weight="600" fill="{TXT}">IaC · CI/CD · AWS</text>']
-    guardar("ahora.svg", envolver(W, H, "".join(s), "Construyendo sistemas full stack con IA, bases de datos y backend. Aprendiendo IaC, CI/CD y AWS"))
+    W, H = 1000, 128
+    css = css_base(".on{transform-origin:center;animation:on 2.4s ease-out infinite}" + keyframes("on", [(0, "transform:scale(1);opacity:.6"), (100, "transform:scale(2.6);opacity:0")]))
+    s = [marco(W, H, S1, LINE, 18),
+         f'<circle class="on" cx="46" cy="46" r="7" fill="none" stroke="{JADE}" stroke-width="2"/><circle cx="46" cy="46" r="6" fill="{JADE}"/>',
+         f'<text x="70" y="52" font-family="{MONO}" font-size="16" fill="{JADE}" letter-spacing="3">CONSTRUYENDO</text>',
+         f'<text x="40" y="94" font-family="{SANS}" font-size="21" font-weight="600" fill="{TXT}">Sistemas full stack con IA, bases de datos y backend</text>',
+         f'<line x1="652" y1="26" x2="652" y2="102" stroke="{LINE}"/>',
+         f'<circle cx="690" cy="46" r="6" fill="none" stroke="{ORO}" stroke-width="2" stroke-dasharray="3 3"/>',
+         f'<text x="710" y="52" font-family="{MONO}" font-size="16" fill="{ORO}" letter-spacing="3">APRENDIENDO</text>',
+         f'<text x="680" y="94" font-family="{SANS}" font-size="21" font-weight="600" fill="{TXT}">IaC · CI/CD · AWS</text>']
+    guardar("ahora.svg", envolver(W, H, "".join(s), "Construyendo sistemas full stack con IA, bases de datos y backend. Aprendiendo IaC, CI/CD y AWS", DEFS_COMUN, css))
 
 
 def sobre_mi():
-    W, H = 1000, 250
-    lineas = ["Estudio Ingeniería de Sistemas e IA en la UPAO. Antes de escribir código intento entender el problema:",
-              "defino el alcance en historias de usuario, diseño la arquitectura y recién después implemento.",
-              "Trabajo con Scrum y XP en proyectos que combinan frontend, backend, bases de datos e IA."]
-    s = [f'<rect x=".5" y=".5" width="999" height="249" rx="16" fill="{S1}" stroke="{LINE}"/>',
-         f'<rect x="0" y="24" width="4" height="120" rx="2" fill="url(#gTxt)"/>']
+    W, H = 1000, 350
+    lineas = ["Estudio Ingeniería de Sistemas e IA en la UPAO, en Trujillo.",
+              "Antes de escribir código intento entender el problema: defino el alcance",
+              "en historias de usuario, diseño la arquitectura y recién después implemento.",
+              "Trabajo con Scrum y XP en proyectos que combinan frontend, backend,",
+              "bases de datos e IA."]
+    css = css_base(".l{animation:ap 1s ease-out both}" + keyframes("ap", [(0, "opacity:0;transform:translateY(8px)"), (100, "opacity:1;transform:translateY(0)")]))
+    s = [marco(W, H, S1, LINE, 18), f'<rect x="0" y="30" width="5" height="190" rx="2.5" fill="url(#gTxt)"/>']
     for i, t in enumerate(lineas):
-        s.append(f'<text x="40" y="{58 + i * 32}" font-family="{SANS}" font-size="18" fill="{TXT}" fill-opacity="0">{t}'
-                 f'<animate attributeName="fill-opacity" values="0;0;1;1" keyTimes="0;{.05 + i * .1:.2f};{.2 + i * .1:.2f};1" dur="1.6s" fill="freeze"/></text>')
-    s.append(f'<text x="40" y="164" font-family="{SANS}" font-size="15" fill="{MUTED}">Estoy en etapa de formación: más abajo separo lo que ya usé en proyectos de lo que estoy aprendiendo.</text>')
-    chips = [("FORMACIÓN", "UPAO · 6.º ciclo", CYAN), ("UBICACIÓN", "Trujillo, Perú", BLUE), ("METODOLOGÍA", "Scrum · XP", PURPLE)]
-    for i, (k, v, c) in enumerate(chips):
-        x = 40 + i * 310
-        s.append(f'<rect x="{x}" y="188" width="290" height="38" rx="10" fill="{S2}" stroke="{c}" stroke-opacity=".5"/>'
-                 f'<circle cx="{x + 18}" cy="207" r="4" fill="{c}"/>'
-                 f'<text x="{x + 34}" y="211" font-family="{MONO}" font-size="11" fill="{MUTED}" letter-spacing="2">{k}</text>'
-                 f'<text x="{x + 142}" y="212" font-family="{SANS}" font-size="15" font-weight="600" fill="{TXT}">{v}</text>')
-    guardar("sobre-mi.svg", envolver(W, H, "".join(s), "Estudio Ingeniería de Sistemas e IA en la UPAO. Trabajo con Scrum y XP en proyectos de frontend, backend, bases de datos e IA"))
+        s.append(f'<text class="l" style="animation-delay:{i * .25:.2f}s" x="44" y="{66 + i * 36}" font-family="{SANS}" font-size="21" fill="{TXT}">{t}</text>')
+    s.append(f'<text x="44" y="262" font-family="{SANS}" font-size="17" fill="{MUTED}">Sigo en formación: más abajo separo lo que ya usé en proyectos de lo que estoy aprendiendo.</text>')
+    chips = [("ESTUDIO", "UPAO · 6.º ciclo", JADE, 44), ("LUGAR", "Trujillo, Perú", MENTA, 348), ("MÉTODO", "Scrum · XP", ORO, 652)]
+    for k, v, c, x in chips:
+        s.append(f'<rect x="{x}" y="286" width="290" height="44" rx="12" fill="{S2}" stroke="{c}" stroke-opacity=".55"/><circle cx="{x + 20}" cy="308" r="4.5" fill="{c}"/>'
+                 f'<text x="{x + 36}" y="313" font-family="{MONO}" font-size="16" fill="{MUTED}" letter-spacing="1">{k}</text>'
+                 f'<text x="{x + 274}" y="314" text-anchor="end" font-family="{SANS}" font-size="18" font-weight="600" fill="{TXT}">{v}</text>')
+    guardar("sobre-mi.svg", envolver(W, H, "".join(s), "Estudio Ingeniería de Sistemas e IA en la UPAO, en Trujillo. Defino el alcance, diseño la arquitectura y luego implemento. Trabajo con Scrum y XP en proyectos de frontend, backend, bases de datos e IA.", DEFS_COMUN, css))
 
 
-# ---------------------------------------------------------------------- stack
+# ------------------------------------------------------------------------ stack
+CAPAS = [
+    ("Interfaz", "UI", JADE, [("react", "React"), ("vite", "Vite"), ("tailwindcss", "Tailwind"), ("html5", "HTML"), ("css", "CSS"), ("javascript", "JavaScript"), ("typescript", "TypeScript")]),
+    ("Servicios", "API · LÓGICA", MENTA, [("python", "Python"), ("java", "Java"), ("csharp", "C#"), ("fastapi", "FastAPI"), ("springboot", "Spring Boot")]),
+    ("Datos e IA", "DATOS · ML", SALVIA, [("scikitlearn", "scikit-learn"), ("pandas", "pandas"), ("mysql", "MySQL"), ("oracle", "Oracle"), ("postgresql", "PostgreSQL"), ("neon", "Neon"), ("supabase", "Supabase")]),
+    ("Entrega y método", "FLUJO", "#C9D6CF", [("git", "Git"), ("github", "GitHub")]),
+]
+
+
 def stack():
-    W, H = 1000, 440
-    cat = {"len": CYAN, "web": BLUE, "dat": PURPLE, "met": "#CBD5E1", "apr": MUTED}
-    celdas = [("Py", "Python", "len"), ("Jv", "Java", "len"), ("C#", "C#", "len"), ("JS", "JavaScript", "len"), ("TS", "TypeScript", "len"),
-              ("Fa", "FastAPI", "web"), ("Re", "React", "web"), ("Vi", "Vite", "web"),
-              ("Tw", "Tailwind", "web"), ("H5", "HTML", "web"), ("C3", "CSS", "web"),
-              ("Sk", "scikit-learn", "dat"), ("Pd", "pandas", "dat"), ("Oa", "OpenAI API", "dat"),
-              ("My", "MySQL", "dat"), ("Or", "Oracle", "dat"), ("Pg", "PostgreSQL", "dat"), ("Ne", "Neon", "dat"),
-              ("Su", "Supabase", "dat"), ("Sc", "Scrum", "met"), ("XP", "Extreme Prog.", "met"),
-              ("IaC", "Infra. como código", "apr"), ("CI", "CI/CD", "apr"), ("Aw", "AWS", "apr")]
-    leyenda = [("Lenguajes", "len", False), ("Backend y frontend", "web", False), ("Datos e IA", "dat", False), ("Metodología", "met", False), ("En aprendizaje", "apr", True)]
-    s = [f'<rect x=".5" y=".5" width="999" height="439" rx="16" fill="{S1}" stroke="{LINE}"/>']
-    x = 40
-    for nombre, k, dash in leyenda:
-        s.append(f'<rect x="{x}" y="28" width="12" height="12" rx="3" fill="none" stroke="{cat[k]}" stroke-width="1.6"{" stroke-dasharray=\"3 2\"" if dash else ""}/>'
-                 f'<rect x="{x + 3}" y="31" width="6" height="6" rx="1.5" fill="{cat[k]}"{" fill-opacity=\".45\"" if dash else ""}/>'
-                 f'<text x="{x + 20}" y="39" font-family="{MONO}" font-size="12" fill="{MUTED}" letter-spacing="1">{nombre}</text>')
-        x += 40 + len(nombre) * 8 + 24
-    cw, ch, gap, x0, y0 = 108, 104, 8, 40, 64
-    s.append(f'<clipPath id="cg"><rect x="{x0}" y="{y0}" width="920" height="{3 * ch + 2 * gap}"/></clipPath><g clip-path="url(#cg)">')
-    for i, (sim, nom, k) in enumerate(celdas):
-        cx, cy = x0 + (i % 8) * (cw + gap), y0 + (i // 8) * (ch + gap)
-        c = cat[k]
-        dash = ' stroke-dasharray="5 4"' if k == "apr" else ""
-        d = i * .03
-        s.append(f'<g><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;{d / 1.8:.3f};{(d + .35) / 1.8:.3f};1" dur="1.8s" fill="freeze"/>'
-                 f'<rect x="{cx}" y="{cy}" width="{cw}" height="{ch}" rx="12" fill="{S2}" stroke="{c}" stroke-opacity=".6"{dash}/>'
-                 f'<rect x="{cx + 12}" y="{cy}" width="{cw - 24}" height="3" rx="1.5" fill="{c}"><animate attributeName="opacity" values="1;.35;1" dur="{3 + (i % 5) * .4:.1f}s" repeatCount="indefinite"/></rect>'
-                 f'<text x="{cx + 12}" y="{cy + 24}" font-family="{MONO}" font-size="10" fill="{MUTED}" letter-spacing="1">{i + 1:02d}</text>'
-                 f'<text x="{cx + cw / 2}" y="{cy + 62}" text-anchor="middle" font-family="{SANS}" font-size="{30 if len(sim) < 3 else 26}" font-weight="800" fill="{c}">{sim}</text>'
-                 f'<text x="{cx + cw / 2}" y="{cy + 88}" text-anchor="middle" font-family="{SANS}" font-size="11.5" fill="{MUTED}">{nom}</text></g>')
-    s.append(f'<rect x="0" y="{y0}" width="130" height="{3 * ch + 2 * gap}" fill="url(#gSweep)"><animateTransform attributeName="transform" type="translate" values="-200 0;1100 0" dur="6s" repeatCount="indefinite"/></rect></g>')
-    guardar("stack.svg", envolver(W, H, "".join(s), "Stack técnico. Lenguajes: Python, Java, C#, JavaScript, TypeScript. Backend y frontend: FastAPI, React, Vite, Tailwind, HTML, CSS. Datos e IA: scikit-learn, pandas, OpenAI API, MySQL, Oracle, PostgreSQL, Neon, Supabase. Metodología: Scrum, XP. En aprendizaje: IaC, CI/CD, AWS"))
+    W, ALTO, GAP, Y0 = 1000, 118, 28, 28
+    capas = len(CAPAS) + 1
+    H = Y0 * 2 + capas * ALTO + (capas - 1) * GAP
+    css = css_base(".fl{stroke-dasharray:4 8;animation:fl 1.3s linear infinite}" + keyframes("fl", [(0, "stroke-dashoffset:0"), (100, "stroke-dashoffset:-24")])
+                   + ".pk{animation:pk 2.6s ease-in-out infinite}" + keyframes("pk", [(0, "transform:translateY(-14px);opacity:0"), (30, "opacity:1"), (70, "opacity:1"), (100, "transform:translateY(14px);opacity:0")])
+                   + ".ap{animation:apd 3s linear infinite}" + keyframes("apd", [(0, "stroke-dashoffset:0"), (100, "stroke-dashoffset:-36")]))
+    s, defs = [], DEFS_COMUN
+    for i, (nombre, sub, c, logos) in enumerate(CAPAS):
+        y = Y0 + i * (ALTO + GAP)
+        s.append(f'<rect x="28" y="{y}" width="944" height="{ALTO}" rx="16" fill="{S1}" stroke="{LINE}"/>'
+                 f'<rect x="28" y="{y}" width="5" height="{ALTO}" rx="2.5" fill="{c}"/>'
+                 f'<text x="56" y="{y + 52}" font-family="{SANS}" font-size="22" font-weight="800" fill="{TXT}">{nombre}</text>'
+                 f'<text x="56" y="{y + 80}" font-family="{MONO}" font-size="16" fill="{c}" letter-spacing="1.5">{sub}</text>')
+        x = 250
+        for clave, nom in logos:
+            tam = 58 if clave == "oracle" else 44
+            s.append(logo(clave, x + 51 - tam // 2, y + 42 - tam // 2, tam) + f'<text x="{x + 51}" y="{y + 90}" text-anchor="middle" font-family="{SANS}" font-size="16" fill="{MUTED}">{nom}</text>')
+            x += 102
+        if nombre == "Entrega y método":
+            for j, p in enumerate(("Scrum", "XP")):
+                px = x + 40 + j * 130
+                s.append(f'<rect x="{px}" y="{y + 38}" width="112" height="42" rx="21" fill="{S2}" stroke="#C9D6CF" stroke-opacity=".5"/>'
+                         f'<text x="{px + 56}" y="{y + 66}" text-anchor="middle" font-family="{SANS}" font-size="19" font-weight="600" fill="{TXT}">{p}</text>')
+        if i < len(CAPAS):
+            for cx in (330, 520, 710, 880):
+                yy = y + ALTO
+                s.append(f'<line class="fl" x1="{cx}" y1="{yy + 2}" x2="{cx}" y2="{yy + GAP - 2}" stroke="{c}" stroke-opacity=".7" stroke-width="2"/>'
+                         f'<circle class="pk" style="animation-delay:{(cx % 7) * .15:.2f}s" cx="{cx}" cy="{yy + GAP / 2}" r="3.5" fill="{MENTA}"/>')
+    # capa en aprendizaje (diferenciada: borde discontinuo, color oro)
+    y = Y0 + len(CAPAS) * (ALTO + GAP)
+    s.append(f'<rect class="ap" x="28" y="{y}" width="944" height="{ALTO}" rx="16" fill="{BG}" stroke="{ORO}" stroke-width="1.6" stroke-dasharray="9 7"/>'
+             f'<text x="56" y="{y + 52}" font-family="{SANS}" font-size="22" font-weight="800" fill="{TXT}">En aprendizaje</text>'
+             f'<text x="56" y="{y + 80}" font-family="{MONO}" font-size="16" fill="{ORO}" letter-spacing="1.5">NIVEL DE CURSO</text>')
+    s.append(logo("amazonwebservices", 250 + 29, y + 20, 44) + f'<text x="{250 + 51}" y="{y + 90}" text-anchor="middle" font-family="{SANS}" font-size="16" fill="{MUTED}">AWS</text>')
+    for j, p in enumerate(("IaC", "CI/CD")):
+        px = 420 + j * 150
+        s.append(f'<rect x="{px}" y="{y + 38}" width="130" height="42" rx="21" fill="none" stroke="{ORO}" stroke-opacity=".8" stroke-dasharray="4 4"/>'
+                 f'<text x="{px + 65}" y="{y + 66}" text-anchor="middle" font-family="{SANS}" font-size="19" font-weight="600" fill="{ORO}">{p}</text>')
+    s.append(f'<text x="960" y="{y + 90}" text-anchor="end" font-family="{SANS}" font-size="16" fill="{MUTED}">Aprendiendo a nivel de curso</text>')
+    guardar("stack.svg", envolver(W, H, "".join(s), "Stack técnico en capas. Interfaz: React, Vite, Tailwind, HTML, CSS, JavaScript y TypeScript. Servicios: Python, Java, C#, FastAPI y Spring Boot. Datos e IA: scikit-learn, pandas, MySQL, Oracle, PostgreSQL, Neon y Supabase. Entrega y método: Git, GitHub, Scrum y XP. En aprendizaje, a nivel de curso: AWS, IaC y CI/CD.", defs, css))
 
 
-# ------------------------------------------------------------------ proyectos
-def tarjeta(archivo, pid, categoria, nombre, desc, chips, color, visual, etiqueta):
-    W, H = 490, 352
-    s = [f'<rect x=".5" y=".5" width="489" height="351" rx="16" fill="{S1}" stroke="{color}" stroke-opacity=".45"/>',
-         f'<rect x="1" y="1" width="488" height="168" rx="15" fill="{color}" fill-opacity=".05"/>',
-         f'<rect x="16" y="1" width="458" height="2.5" rx="1" fill="{color}" fill-opacity=".35"/>',
-         f'<rect x="16" y="0.5" width="80" height="3" rx="1.5" fill="{color}" filter="url(#glow)"><animate attributeName="x" values="16;394;16" dur="7s" repeatCount="indefinite"/></rect>',
-         f'<text x="24" y="34" font-family="{MONO}" font-size="12" fill="{color}" letter-spacing="2">{pid}</text>',
-         f'<text x="466" y="34" text-anchor="end" font-family="{MONO}" font-size="11" fill="{MUTED}" letter-spacing="2">{categoria}</text>',
-         visual,
-         f'<text x="24" y="206" font-family="{SANS}" font-size="25" font-weight="800" fill="{TXT}" letter-spacing="-.3">{nombre}</text>']
-    for i, t in enumerate(desc):
-        s.append(f'<text x="24" y="{232 + i * 20}" font-family="{SANS}" font-size="14.5" fill="{MUTED}">{t}</text>')
-    x = 24
-    for c in chips:
-        w = 18 + len(c) * 7.8
-        s.append(f'<rect x="{x}" y="278" width="{w:.0f}" height="26" rx="13" fill="{S2}" stroke="{LINE}"/>'
-                 f'<text x="{x + w / 2:.0f}" y="295" text-anchor="middle" font-family="{MONO}" font-size="12" fill="{TXT}">{c}</text>')
-        x += w + 8
-    s.append(f'<text x="24" y="333" font-family="{MONO}" font-size="12" fill="{color}" letter-spacing="1">VER PROYECTO <tspan>'
-             f'<animate attributeName="dx" values="0;6;0" dur="1.6s" repeatCount="indefinite"/>→</tspan></text>')
-    guardar(archivo, envolver(W, H, "".join(s), etiqueta))
+# ------------------------------------------------------------ botones y pie
+def boton_enlace(archivo, texto, acento, acento2, tipo, etiqueta):
+    """tipo 'repo' (contorno + logo de GitHub) o 'demo' (relleno + flecha)."""
+    W, H = 280, 60
+    css = css_base(".b{animation:b 3.5s linear infinite}" + keyframes("b", [(0, "stroke-dashoffset:0"), (100, "stroke-dashoffset:-340")]))
+    g = f'<linearGradient id="gb" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="{acento}"/><stop offset="1" stop-color="{acento2}"/></linearGradient>'
+    if tipo == "repo":
+        s = [f'<rect x="1" y="1" width="278" height="58" rx="29" fill="{S1}" stroke="{acento}" stroke-opacity=".75" stroke-width="1.6"/>',
+             f'<rect class="b" x="1" y="1" width="278" height="58" rx="29" fill="none" stroke="{acento2}" stroke-width="2.4" stroke-dasharray="46 294"/>',
+             logo("github", 26, 15, 30, TXT),
+             f'<text x="70" y="38" font-family="{SANS}" font-size="21" font-weight="700" fill="{TXT}">{texto}</text>']
+    else:
+        s = [f'<rect x="1" y="1" width="278" height="58" rx="29" fill="url(#gb)"/>',
+             f'<path d="M30 40L44 26M33 26H44V37" fill="none" stroke="{BG}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>',
+             f'<text x="64" y="38" font-family="{SANS}" font-size="21" font-weight="800" fill="{BG}">{texto}</text>']
+    guardar(archivo, envolver(W, H, "".join(s), etiqueta, g, css))
 
 
-def vis_pipeline():
-    cajas = [("React + Vite", 28), ("FastAPI", 190), ("OpenAI API", 352)]
-    s = []
-    for t, x in cajas:
-        s.append(f'<rect x="{x}" y="64" width="110" height="52" rx="12" fill="{S2}" stroke="{CYAN}" stroke-opacity=".6"/>'
-                 f'<text x="{x + 55}" y="95" text-anchor="middle" font-family="{SANS}" font-size="13" font-weight="700" fill="{TXT}">{t}</text>')
-    for x1, x2 in ((138, 190), (300, 352)):
-        s.append(f'<line x1="{x1}" y1="90" x2="{x2}" y2="90" stroke="{CYAN}" stroke-width="1.6" stroke-dasharray="4 5"><animate attributeName="stroke-dashoffset" from="0" to="-18" dur=".9s" repeatCount="indefinite"/></line>'
-                 f'<circle r="3.5" fill="{CYAN}" filter="url(#glow)"><animateMotion dur="1.8s" repeatCount="indefinite" path="M{x1} 90 L{x2} 90"/></circle>')
-    s.append(f'<text x="83" y="146" text-anchor="middle" font-family="{MONO}" font-size="10.5" fill="{MUTED}">texto / PDF</text>'
-             f'<text x="245" y="146" text-anchor="middle" font-family="{MONO}" font-size="10.5" fill="{MUTED}">sin guardar datos</text>'
-             f'<text x="407" y="146" text-anchor="middle" font-family="{MONO}" font-size="10.5" fill="{MUTED}">resumen · mapa</text>')
-    return "".join(s)
-
-
-def vis_asientos():
-    s = []
-    for f in range(4):
-        for c in range(10):
-            x = 90 + c * 30 + (18 if c >= 5 else 0)
-            y = 48 + f * 22 + (8 if f >= 2 else 0)
-            idx = f * 10 + c
-            ocupado = idx in (2, 3, 11, 17, 23, 31, 36)
-            sel = idx in (14, 15)
-            fill = MUTED if ocupado else S2
-            op = .45 if ocupado else 1
-            stroke = BLUE if not ocupado else MUTED
-            extra = ""
-            if sel:
-                extra = f'<animate attributeName="fill" values="{S2};{BLUE};{S2}" dur="2.4s" repeatCount="indefinite"/>'
-            s.append(f'<rect x="{x}" y="{y}" width="22" height="18" rx="5" fill="{fill}" fill-opacity="{op}" stroke="{stroke}" stroke-opacity=".7">{extra}</rect>')
-    s.append(f'<text x="24" y="160" font-family="{MONO}" font-size="10.5" fill="{MUTED}">selección de asiento · compra · ticket electrónico</text>')
-    return "".join(s)
-
-
-def vis_regresion():
-    s = [f'<path d="M40 134V52M40 134H458" stroke="{MUTED}" stroke-opacity=".5" fill="none"/>']
-    puntos = []
-    for i in range(22):
-        x = 56 + i * 18.5
-        t = i / 21
-        y = 118 - t * 56 + ((i * 37) % 17 - 8) * 1.5
-        puntos.append((x, y))
-    for i, (x, y) in enumerate(puntos):
-        s.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3.2" fill="{PURPLE}" fill-opacity="0"><animate attributeName="fill-opacity" values="0;0;.9;.9" keyTimes="0;{i / 40:.2f};{i / 40 + .1:.2f};1" dur="3s" repeatCount="indefinite"/></circle>')
-    s.append(f'<path d="M52 116 L450 60" stroke="{CYAN}" stroke-width="2" fill="none" stroke-dasharray="420" stroke-dashoffset="420" filter="url(#glow)">'
-             f'<animate attributeName="stroke-dashoffset" values="420;420;0;0" keyTimes="0;.35;.75;1" dur="3s" repeatCount="indefinite"/></path>')
-    s.append(f'<text x="44" y="46" font-family="{MONO}" font-size="10.5" fill="{MUTED}">nivel_conocimiento ∈ [0, 1]</text>'
-             f'<text x="458" y="152" text-anchor="end" font-family="{MONO}" font-size="10.5" fill="{MUTED}">períodos de práctica</text>')
-    return "".join(s)
-
-
-def vis_tabla():
-    s = [f'<rect x="28" y="50" width="434" height="22" rx="6" fill="{S2}"/>']
-    for x, w in ((40, 70), (210, 50), (340, 60)):
-        s.append(f'<rect x="{x}" y="57" width="{w}" height="8" rx="4" fill="{MUTED}" fill-opacity=".6"/>')
-    anchos = [(110, 70), (90, 56), (130, 78), (100, 64)]
-    for i, (a, b) in enumerate(anchos):
-        y = 82 + i * 22
-        col = [CYAN, BLUE, PURPLE, CYAN][i]
-        s.append(f'<rect x="40" y="{y + 3}" width="{a}" height="7" rx="3.5" fill="{MUTED}" fill-opacity=".28"/>'
-                 f'<rect x="210" y="{y + 3}" width="{b}" height="7" rx="3.5" fill="{col}" fill-opacity=".7"><animate attributeName="width" values="0;{b};{b}" keyTimes="0;.4;1" dur="3s" begin="{i * .25:.2f}s" repeatCount="indefinite"/></rect>'
-                 f'<circle cx="352" cy="{y + 6.5}" r="4" fill="{col}"><animate attributeName="opacity" values="1;.3;1" dur="{2 + i * .4:.1f}s" repeatCount="indefinite"/></circle>')
-    return "".join(s)
-
-
-def proyectos():
-    tarjeta("proyecto-01.svg", "P-01", "FULL STACK · IA", "Plataforma Estudio AI",
-            ["Resúmenes y mapas conceptuales con IA a partir de", "texto o PDF. Backend en FastAPI, sin base de datos."],
-            ["React", "FastAPI", "OpenAI", "Google OAuth"], CYAN, vis_pipeline(),
-            "Proyecto P-01 Plataforma Estudio AI: resúmenes y mapas conceptuales con IA. React, FastAPI, OpenAI, Google OAuth")
-    tarjeta("proyecto-02.svg", "P-02", "FRONTEND · WEB", "RutaLibre",
-            ["Portal de transporte terrestre: búsqueda de viajes,", "compra de pasajes y tickets electrónicos."],
-            ["React", "Vite", "Scrum"], BLUE, vis_asientos(),
-            "Proyecto P-02 RutaLibre: portal web de transporte terrestre. React, Vite, Scrum")
-    tarjeta("proyecto-03.svg", "P-03", "MACHINE LEARNING", "Agente Educativo Inteligente",
-            ["Regresión que estima el nivel de conocimiento (0–1)", "por estudiante y concepto. Dataset sintético de 125 000."],
-            ["Python", "scikit-learn", "pandas"], PURPLE, vis_regresion(),
-            "Proyecto P-03 Agente Educativo Inteligente: modelo de regresión del nivel de conocimiento. Python, scikit-learn, pandas")
-    tarjeta("proyecto-04.svg", "P-04", "SISTEMA EMPRESARIAL", "NEXORA Finance",
-            ["Gestión y auditoría de préstamos para una financiera", "con varias agencias. Base de datos en Supabase en curso."],
-            ["React", "TypeScript", "Tailwind", "Supabase"], BLUE, vis_tabla(),
-            "Proyecto P-04 NEXORA Finance: gestión y auditoría de préstamos. React, TypeScript, Tailwind, Supabase")
-
-
-# ------------------------------------------------------------ contacto / pie
-def boton(archivo, texto, color, glifo):
-    W, H = 200, 54
-    s = [f'<rect x=".5" y=".5" width="199" height="53" rx="27" fill="{S1}" stroke="{color}" stroke-opacity=".7"/>',
-         f'<rect x=".5" y=".5" width="199" height="53" rx="27" fill="none" stroke="{color}" stroke-width="2" stroke-dasharray="40 340" filter="url(#glow)"><animate attributeName="stroke-dashoffset" from="0" to="-380" dur="4s" repeatCount="indefinite"/></rect>',
-         f'<circle cx="34" cy="27" r="14" fill="{color}" fill-opacity=".15"/>',
-         f'<text x="34" y="32" text-anchor="middle" font-family="{SANS}" font-size="14" font-weight="800" fill="{color}">{glifo}</text>',
-         f'<text x="62" y="32" font-family="{SANS}" font-size="16" font-weight="700" fill="{TXT}">{texto}</text>']
-    guardar(archivo, envolver(W, H, "".join(s), texto))
+def boton_contacto(archivo, texto, glifo_logo, etiqueta):
+    W, H = 300, 64
+    css = css_base(".b{animation:b 4s linear infinite}" + keyframes("b", [(0, "stroke-dashoffset:0"), (100, "stroke-dashoffset:-380")]))
+    s = [f'<rect x="1" y="1" width="298" height="62" rx="31" fill="{S1}" stroke="{JADE}" stroke-opacity=".6" stroke-width="1.6"/>',
+         f'<rect class="b" x="1" y="1" width="298" height="62" rx="31" fill="none" stroke="{MENTA}" stroke-width="2.4" stroke-dasharray="46 334"/>']
+    if glifo_logo:
+        s.append(logo(glifo_logo, 28, 16, 32, TXT))
+    pos = 'x="74"' if glifo_logo else 'x="150" text-anchor="middle"'
+    s.append(f'<text {pos} y="41" font-family="{SANS}" font-size="22" font-weight="700" fill="{TXT}">{texto}</text>')
+    guardar(archivo, envolver(W, H, "".join(s), etiqueta, "", css))
 
 
 def pie():
-    W, H = 1000, 110
-    s = [f'<rect x=".5" y=".5" width="999" height="109" rx="16" fill="{S1}" stroke="{LINE}"/>',
-         f'<line x1="40" y1="30" x2="960" y2="30" stroke="{LINE}"/>',
-         f'<circle cy="30" r="3.5" fill="{CYAN}" filter="url(#glow)"><animate attributeName="cx" values="40;960;40" dur="10s" repeatCount="indefinite"/></circle>',
-         f'<text x="500" y="70" text-anchor="middle" font-family="{SANS}" font-size="20" font-weight="700" fill="url(#gTxt)">Gracias por pasar</text>',
-         f'<text x="500" y="94" text-anchor="middle" font-family="{MONO}" font-size="11" fill="{MUTED}" letter-spacing="3">MATHIAS CASTILLO · SOFTWARE ENGINEERING</text>']
-    guardar("pie.svg", envolver(W, H, "".join(s), "Gracias por pasar. Mathias Castillo, Software Engineering"))
-
-
-def marcador_serpiente():
     W, H = 1000, 120
-    s = [f'<rect x=".5" y=".5" width="999" height="119" rx="16" fill="{S1}" stroke="{LINE}"/>',
-         f'<text x="500" y="56" text-anchor="middle" font-family="{SANS}" font-size="15" fill="{MUTED}">El gráfico de contribuciones animado se genera con el primer workflow de GitHub Actions</text>',
-         f'<circle cx="500" cy="84" r="4" fill="{CYAN}" filter="url(#glow)"><animate attributeName="opacity" values="1;.3;1" dur="2s" repeatCount="indefinite"/></circle>']
-    guardar("snake.svg", envolver(W, H, "".join(s), "Gráfico de contribuciones animado, pendiente de generar"))
+    css = css_base(".pt{animation:rec 10s ease-in-out infinite}" + keyframes("rec", [(0, "transform:translateX(0)"), (50, "transform:translateX(920px)"), (100, "transform:translateX(0)")]))
+    s = [marco(W, H, S1, LINE, 18), f'<line x1="40" y1="32" x2="960" y2="32" stroke="{LINE}"/><circle class="pt" cx="40" cy="32" r="4" fill="{MENTA}"/>',
+         f'<text x="500" y="76" text-anchor="middle" font-family="{SANS}" font-size="22" font-weight="700" fill="url(#gTxt)">Gracias por pasar</text>',
+         f'<text x="500" y="102" text-anchor="middle" font-family="{MONO}" font-size="16" fill="{MUTED}" letter-spacing="2">MATHIAS CASTILLO · SOFTWARE ENGINEERING</text>']
+    guardar("pie.svg", envolver(W, H, "".join(s), "Gracias por pasar. Mathias Castillo, Software Engineering", DEFS_COMUN, css))
 
 
-if __name__ == "__main__":
+def principal():
     header()
     ahora()
     titulo(1, "Sobre mí", "about", "titulo-sobre-mi.svg")
@@ -326,12 +238,21 @@ if __name__ == "__main__":
     titulo(2, "Stack técnico", "stack", "titulo-stack.svg")
     stack()
     titulo(3, "Proyectos", "projects", "titulo-proyectos.svg")
-    proyectos()
+    import proyectos  # tarjetas animadas y botones
+    proyectos.generar(boton_enlace)
     titulo(4, "Actividad", "analytics", "titulo-actividad.svg")
     titulo(5, "Contacto", "connect", "titulo-contacto.svg")
-    boton("contacto-github.svg", "GitHub", CYAN, "GH")
-    boton("contacto-linkedin.svg", "LinkedIn", BLUE, "in")
+    boton_contacto("contacto-github.svg", "GitHub", "github", "Ir al perfil de GitHub")
+    boton_contacto("contacto-linkedin.svg", "LinkedIn", None, "Ir al perfil de LinkedIn")
     pie()
-    marcador_serpiente()
-    # marcadores hasta que el workflow genere los datos reales
-    generar_stats.escribir_marcador(os.path.join(SALIDA, "stats.svg"))
+    # marcadores sin cifras hasta que el workflow genere datos reales (no se pisan los datos reales)
+    for nombre, fn in (("stats.svg", generar_stats.svg_panel), ("heatmap.svg", generar_stats.svg_heatmap)):
+        ruta = os.path.join(SALIDA, nombre)
+        if not (os.path.exists(ruta) and "Actualizado" in open(ruta, encoding="utf-8").read()):
+            with open(ruta, "w", encoding="utf-8") as f:
+                f.write(fn(None))
+            print("ok", nombre, "(marcador)")
+
+
+if __name__ == "__main__":
+    principal()
